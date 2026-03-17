@@ -731,6 +731,20 @@ app.get(`${API_BASE}/health`, (req, res) => {
   res.json({ status: 'ok', message: 'Learnify backend is running' });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Welcome to Learnify AI Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      generateExam: 'POST /api/quiz/generate',
+      revisionChat: 'POST /api/revision/chat',
+      documentation: 'https://github.com/your-repo/learnify-backend'
+    }
+  });
+});
+
 // ============ Start Server ============
 const PORT = process.env.PORT || 5000;
 
