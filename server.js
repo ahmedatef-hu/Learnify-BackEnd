@@ -238,56 +238,10 @@ REQUIRED JSON FORMAT (no extra text):
 Generate exactly 10 questions now:`;
 
   try {
-    // Try OpenAI first (more reliable)
-    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY || 'sk-test'}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{
-          role: 'user',
-          content: combinedContent
-        }],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
-    });
-
-    if (openaiResponse.ok) {
-      const openaiData = await openaiResponse.json();
-      const text = openaiData.choices[0].message.content;
-      
-      // Extract JSON from response
-      let jsonText = text;
-      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        jsonText = codeBlockMatch[1];
-      }
-      
-      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const quizData = JSON.parse(jsonMatch[0]);
-        
-        if (quizData.questions && Array.isArray(quizData.questions)) {
-          console.log(`✅ Generated ${quizData.questions.length} questions using OpenAI`);
-          return {
-            questions: quizData.questions.map((q, index) => ({
-              question: q.question || q.text || 'Question not available',
-              options: q.options || [],
-              correct: typeof q.correct === 'number' ? q.correct : 0
-            }))
-          };
-        }
-      }
-    }
-
-    // Fallback to Gemini
+    // Use Gemini AI
     const axios = require('axios');
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
@@ -515,7 +469,7 @@ Your response:`;
     // Call Gemini AI
     const axios = require('axios');
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
