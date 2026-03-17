@@ -9,7 +9,22 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// Configure CORS for production and development
+const corsOptions = {
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000', 
+    'https://learnify-react.vercel.app',
+    'https://learnify-cap.vercel.app',
+    /\.vercel\.app$/
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Increase limit for large materials
 
 const API_BASE = '/api';
