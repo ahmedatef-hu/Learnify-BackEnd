@@ -420,16 +420,21 @@ app.post(`${API_BASE}/quizzes/submit`, (req, res) => {
  * Get AI response for revision chat
  */
 app.post(`${API_BASE}/revision/chat`, async (req, res) => {
+  console.log('📝 Revision chat request received:', req.body);
+  
   try {
     const { topicId, question, materials, conversationHistory } = req.body;
 
     if (!topicId || !question) {
+      console.log('❌ Missing required fields');
       return res.status(400).json({
         error: true,
         message: 'Missing topicId or question',
         code: 'INVALID_REQUEST',
       });
     }
+
+    console.log('🤖 Processing chat request for:', topicId, question);
 
     // Build context from materials if available
     let context = `You are a helpful AI tutor for the subject: ${topicId}\n\n`;
@@ -466,7 +471,9 @@ app.post(`${API_BASE}/revision/chat`, async (req, res) => {
 
 Your response:`;
 
-    // Call Gemini AI
+    console.log('🚀 Calling Gemini AI...');
+
+    // Call Gemini AI with timeout
     const axios = require('axios');
     const response = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
@@ -486,10 +493,12 @@ Your response:`;
       {
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // 30 second timeout
       }
     );
 
+    console.log('✅ AI Response received');
     const aiResponse = response.data.candidates[0].content.parts[0].text;
 
     res.json({
@@ -497,11 +506,12 @@ Your response:`;
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Chat AI Error:', error.response?.data || error.message);
+    console.error('❌ Chat AI Error:', error.response?.data || error.message);
     res.status(500).json({
       error: true,
       message: 'Failed to get AI response',
       code: 'AI_ERROR',
+      details: error.message
     });
   }
 });
