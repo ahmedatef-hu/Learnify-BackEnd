@@ -241,7 +241,7 @@ Generate exactly 10 questions now:`;
     // Use Gemini AI
     const axios = require('axios');
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
@@ -469,7 +469,7 @@ Your response:`;
     // Call Gemini AI
     const axios = require('axios');
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         contents: [{
           parts: [{
