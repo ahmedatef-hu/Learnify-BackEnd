@@ -238,31 +238,32 @@ REQUIRED JSON FORMAT (no extra text):
 Generate exactly 10 questions now:`;
 
   try {
-    // Use Gemini AI
-    const axios = require('axios');
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        contents: [{
-          parts: [{
-            text: combinedContent
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.9,
-          maxOutputTokens: 8192,
-        }
+    // Use OpenRouter API
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'HTTP-Referer': 'https://learnify-app.com',
+        'X-Title': 'Learnify AI Tutor'
       },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-    
-    const text = response.data.candidates[0].content.parts[0].text;
+      body: JSON.stringify({
+        model: 'openai/gpt-3.5-turbo',
+        messages: [{
+          role: 'user',
+          content: combinedContent
+        }],
+        temperature: 0.7,
+        max_tokens: 2000
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter API error: ${response.status}`);
+    }
+
+    const openaiData = await response.json();
+    const text = openaiData.choices[0].message.content;
     console.log('AI Response received, parsing...');
     
     // Extract JSON from response (handle markdown code blocks)
@@ -471,35 +472,35 @@ app.post(`${API_BASE}/revision/chat`, async (req, res) => {
 
 Your response:`;
 
-    console.log('🚀 Calling Gemini AI...');
+    console.log('🚀 Calling OpenRouter AI...');
 
-    // Call Gemini AI with timeout
-    const axios = require('axios');
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        contents: [{
-          parts: [{
-            text: context
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.9,
-          maxOutputTokens: 1024,
-        }
+    // Call OpenRouter API
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'HTTP-Referer': 'https://learnify-app.com',
+        'X-Title': 'Learnify AI Tutor'
       },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      }
-    );
+      body: JSON.stringify({
+        model: 'openai/gpt-3.5-turbo',
+        messages: [{
+          role: 'user',
+          content: context
+        }],
+        temperature: 0.7,
+        max_tokens: 1024
+      })
+    });
 
+    if (!response.ok) {
+      throw new Error(`OpenRouter API error: ${response.status}`);
+    }
+
+    const openaiData = await response.json();
     console.log('✅ AI Response received');
-    const aiResponse = response.data.candidates[0].content.parts[0].text;
+    const aiResponse = openaiData.choices[0].message.content;
 
     res.json({
       response: aiResponse.trim(),
