@@ -5,7 +5,10 @@
 
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const ReviewService = require('./services/ReviewService');
+const ProgressService = require('./services/ProgressService');
 require('dotenv').config();
 
 const app = express();
@@ -14,6 +17,7 @@ const app = express();
 const corsOptions = {
   origin: [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:3000', 
     'https://learnify-react.vercel.app',
     'https://learnify-cap.vercel.app',
@@ -28,6 +32,10 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Increase limit for large materials
 
 const API_BASE = '/api';
+
+// Initialize services
+const reviewService = new ReviewService();
+const progressService = new ProgressService();
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -128,10 +136,14 @@ const hints = {
  * Generate exam from materials using AI
  */
 app.post(`${API_BASE}/quiz/generate`, async (req, res) => {
+  console.log('📝 Quiz generation request received');
+  console.log('Request body:', JSON.stringify(req.body, null, 2));
+  
   try {
     const { materials, subject } = req.body;
 
     if (!materials || !Array.isArray(materials) || materials.length === 0) {
+      console.log('❌ Invalid materials array');
       return res.status(400).json({
         error: true,
         message: 'Materials array is required',
@@ -139,8 +151,12 @@ app.post(`${API_BASE}/quiz/generate`, async (req, res) => {
       });
     }
 
+    console.log(`✅ Generating quiz for ${subject} with ${materials.length} materials`);
+    
     // Generate quiz using AI
     const quiz = await generateExamFromMaterials(subject || 'General', materials);
+    
+    console.log(`✅ Quiz generated successfully with ${quiz.questions.length} questions`);
     
     res.json({
       success: true,
@@ -153,7 +169,8 @@ app.post(`${API_BASE}/quiz/generate`, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error generating exam:', error);
+    console.error('❌ Error generating exam:', error.message);
+    console.error('Error details:', error);
     res.status(500).json({
       error: true,
       message: 'Failed to generate exam',
@@ -238,33 +255,28 @@ REQUIRED JSON FORMAT (no extra text):
 Generate exactly 10 questions now:`;
 
   try {
-    // Use OpenRouter API
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
+    console.log('🤖 Calling OpenRouter API...');
+    // Use OpenRouter API with axios
+    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+      model: 'openai/gpt-3.5-turbo',
+      messages: [{
+        role: 'user',
+        content: combinedContent
+      }],
+      temperature: 0.7,
+      max_tokens: 2000
+    }, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         'HTTP-Referer': 'https://learnify-app.com',
         'X-Title': 'Learnify AI Tutor'
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
-        messages: [{
-          role: 'user',
-          content: combinedContent
-        }],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.status}`);
-    }
-
-    const openaiData = await response.json();
+    const openaiData = response.data;
     const text = openaiData.choices[0].message.content;
-    console.log('AI Response received, parsing...');
+    console.log('✅ AI Response received, parsing...');
     
     // Extract JSON from response (handle markdown code blocks)
     let jsonText = text;
@@ -463,42 +475,48 @@ app.post(`${API_BASE}/revision/chat`, async (req, res) => {
     }
 
     context += `STUDENT'S QUESTION: ${question}\n\n`;
-    context += `Please provide a helpful, clear, and educational response. 
+    
+    // Detect language for chatbot response only
+    const isArabic = /[\u0600-\u06FF]/.test(question);
+    const language = isArabic ? 'Arabic' : 'English';
+    
+    context += `IMPORTANT LANGUAGE INSTRUCTION:
+- The student asked in ${language}
+- You MUST respond in the SAME language (${language})
+- If Arabic: Use proper Arabic grammar and vocabulary
+- If English: Use clear English
+
+Please provide a helpful, clear, and educational response in ${language}:
 - If the question is about content from the materials, reference specific details
 - Explain concepts clearly and provide examples
 - Encourage the student to think critically
 - Be supportive and motivating
 - Keep responses concise but informative (2-4 sentences)
+- RESPOND IN ${language.toUpperCase()} ONLY
 
-Your response:`;
+Your response in ${language}:`;
 
     console.log('🚀 Calling OpenRouter AI...');
 
-    // Call OpenRouter API
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
+    // Call OpenRouter API with axios
+    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+      model: 'openai/gpt-3.5-turbo',
+      messages: [{
+        role: 'user',
+        content: context
+      }],
+      temperature: 0.7,
+      max_tokens: 1024
+    }, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         'HTTP-Referer': 'https://learnify-app.com',
         'X-Title': 'Learnify AI Tutor'
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
-        messages: [{
-          role: 'user',
-          content: context
-        }],
-        temperature: 0.7,
-        max_tokens: 1024
-      })
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.status}`);
-    }
-
-    const openaiData = await response.json();
+    const openaiData = response.data;
     console.log('✅ AI Response received');
     const aiResponse = openaiData.choices[0].message.content;
 
@@ -708,6 +726,340 @@ app.get('/', (req, res) => {
       documentation: 'https://github.com/your-repo/learnify-backend'
     }
   });
+});
+
+// ============ REVIEW SYSTEM API ENDPOINTS ============
+
+/**
+ * POST /api/reviews
+ * Create a new review
+ */
+app.post(`${API_BASE}/reviews`, async (req, res) => {
+  try {
+    const { studentId, sessionId, rating, comment } = req.body;
+
+    if (!studentId || !sessionId || !rating) {
+      return res.status(400).json({
+        error: true,
+        message: 'Missing required fields: studentId, sessionId, rating',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
+    const review = await reviewService.createReview({
+      studentId,
+      sessionId,
+      rating: parseInt(rating),
+      comment: comment || ''
+    });
+
+    res.status(201).json({
+      success: true,
+      data: review,
+      message: 'Review created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating review:', error);
+    res.status(400).json({
+      error: true,
+      message: error.message,
+      code: 'REVIEW_CREATION_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/reviews/session/:sessionId
+ * Get all reviews for a session
+ */
+app.get(`${API_BASE}/reviews/session/:sessionId`, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { page = 1, limit = 10, sortBy = 'newest' } = req.query;
+
+    const result = await reviewService.getSessionReviews(
+      sessionId,
+      parseInt(page),
+      parseInt(limit),
+      sortBy
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error getting session reviews:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'REVIEW_FETCH_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/reviews/student/:studentId
+ * Get all reviews by a student
+ */
+app.get(`${API_BASE}/reviews/student/:studentId`, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const result = await reviewService.getStudentReviews(
+      studentId,
+      parseInt(page),
+      parseInt(limit)
+    );
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error getting student reviews:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'REVIEW_FETCH_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/reviews/stats/:sessionId
+ * Get review statistics for a session
+ */
+app.get(`${API_BASE}/reviews/stats/:sessionId`, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const stats = await reviewService.getReviewStats(sessionId);
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('Error getting review stats:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'STATS_ERROR'
+    });
+  }
+});
+
+/**
+ * DELETE /api/reviews/:id
+ * Delete a review
+ */
+app.delete(`${API_BASE}/reviews/:id`, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { studentId } = req.body;
+
+    if (!studentId) {
+      return res.status(400).json({
+        error: true,
+        message: 'Student ID is required',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
+    const result = await reviewService.deleteReview(id, studentId);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error deleting review:', error);
+    res.status(400).json({
+      error: true,
+      message: error.message,
+      code: 'REVIEW_DELETE_ERROR'
+    });
+  }
+});
+
+// ============ PROGRESS TRACKING API ENDPOINTS ============
+
+/**
+ * POST /api/progress
+ * Create or update progress
+ */
+app.post(`${API_BASE}/progress`, async (req, res) => {
+  try {
+    const { studentId, skillName, completedSessions, totalSessions } = req.body;
+
+    if (!studentId || !skillName) {
+      return res.status(400).json({
+        error: true,
+        message: 'Missing required fields: studentId, skillName',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
+    const progress = await progressService.createOrUpdateProgress({
+      studentId,
+      skillName,
+      completedSessions: parseInt(completedSessions) || 0,
+      totalSessions: parseInt(totalSessions) || 1
+    });
+
+    res.json({
+      success: true,
+      data: progress,
+      message: 'Progress updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating progress:', error);
+    res.status(400).json({
+      error: true,
+      message: error.message,
+      code: 'PROGRESS_UPDATE_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/progress/:studentId
+ * Get all progress for a student
+ */
+app.get(`${API_BASE}/progress/:studentId`, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const result = await progressService.getStudentProgress(studentId);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error getting student progress:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'PROGRESS_FETCH_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/progress/:studentId/:skill
+ * Get specific skill progress
+ */
+app.get(`${API_BASE}/progress/:studentId/:skill`, async (req, res) => {
+  try {
+    const { studentId, skill } = req.params;
+    const progress = await progressService.getSkillProgress(studentId, decodeURIComponent(skill));
+
+    res.json({
+      success: true,
+      data: progress
+    });
+  } catch (error) {
+    console.error('Error getting skill progress:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'PROGRESS_FETCH_ERROR'
+    });
+  }
+});
+
+/**
+ * GET /api/progress/dashboard/:studentId
+ * Get progress dashboard data
+ */
+app.get(`${API_BASE}/progress/dashboard/:studentId`, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const dashboard = await progressService.getProgressDashboard(studentId);
+
+    res.json({
+      success: true,
+      data: dashboard
+    });
+  } catch (error) {
+    console.error('Error getting progress dashboard:', error);
+    res.status(500).json({
+      error: true,
+      message: error.message,
+      code: 'DASHBOARD_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/progress/session-complete
+ * Update progress after session completion
+ */
+app.post(`${API_BASE}/progress/session-complete`, async (req, res) => {
+  try {
+    const { studentId, skillName, sessionCompleted = true } = req.body;
+
+    if (!studentId || !skillName) {
+      return res.status(400).json({
+        error: true,
+        message: 'Missing required fields: studentId, skillName',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
+    const progress = await progressService.updateProgressAfterSession(
+      studentId,
+      skillName,
+      sessionCompleted
+    );
+
+    res.json({
+      success: true,
+      data: progress,
+      message: 'Progress updated after session completion'
+    });
+  } catch (error) {
+    console.error('Error updating progress after session:', error);
+    res.status(400).json({
+      error: true,
+      message: error.message,
+      code: 'SESSION_UPDATE_ERROR'
+    });
+  }
+});
+
+/**
+ * DELETE /api/progress/:id
+ * Delete progress record
+ */
+app.delete(`${API_BASE}/progress/:id`, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { studentId } = req.body;
+
+    if (!studentId) {
+      return res.status(400).json({
+        error: true,
+        message: 'Student ID is required',
+        code: 'INVALID_REQUEST'
+      });
+    }
+
+    const result = await progressService.deleteProgress(id, studentId);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error deleting progress:', error);
+    res.status(400).json({
+      error: true,
+      message: error.message,
+      code: 'PROGRESS_DELETE_ERROR'
+    });
+  }
 });
 
 // ============ Start Server ============
